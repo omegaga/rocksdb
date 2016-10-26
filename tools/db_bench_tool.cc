@@ -761,6 +761,12 @@ DEFINE_bool(mmap_read, rocksdb::EnvOptions().use_mmap_reads,
 DEFINE_bool(mmap_write, rocksdb::EnvOptions().use_mmap_writes,
             "Allow writes to occur via mmap-ing files");
 
+DEFINE_bool(use_direct_reads, rocksdb::EnvOptions().use_direct_reads,
+            "Use O_DIRECT for reading data");
+
+DEFINE_bool(use_direct_writes, rocksdb::EnvOptions().use_direct_writes,
+            "Use O_DIRECT for writing data");
+
 DEFINE_bool(advise_random_on_open, rocksdb::Options().advise_random_on_open,
             "Advise random access on table file open");
 
