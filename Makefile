@@ -560,7 +560,7 @@ $(parallel_tests): $(PARALLEL_TEST)
       -e '/^(\s*)(\S+)/; !$$1 and do {$$p=$$2; break};'	\
       -e 'print qq! $$p$$2!'`; \
 	for TEST_NAME in $$TEST_NAMES; do \
-		TEST_SCRIPT=t/run-$$TEST_BINARY-$${TEST_NAME//\//-}; \
+		TEST_SCRIPT=t/run-$$TEST_BINARY-`echo $$TEST_NAME | sed 's/\//-/g'`; \
 		echo "  GEN     " $$TEST_SCRIPT; \
     printf '%s\n' \
       '#!/bin/sh' \
@@ -623,7 +623,7 @@ check_0:
 	} \
 	  | $(prioritize_long_running_tests)				\
 	  | grep -E '$(tests-regexp)'					\
-	  | build_tools/gnu_parallel -j$(J) --plain --joblog=LOG $$eta --gnu '{} >& t/log-{/}'
+	  | build_tools/gnu_parallel -j$(J) --plain --joblog=LOG $$eta --gnu '{} > t/log-{/} 2>&1'
 
 .PHONY: valgrind_check_0
 valgrind_check_0:
@@ -872,6 +872,9 @@ arena_test: util/arena_test.o $(LIBOBJECTS) $(TESTHARNESS)
 	$(AM_LINK)
 
 autovector_test: util/autovector_test.o $(LIBOBJECTS) $(TESTHARNESS)
+	$(AM_LINK)
+
+persistent_allocator_test: util/persistent_allocator_test.o $(LIBOBJECTS) $(TESTHARNESS)
 	$(AM_LINK)
 
 column_family_test: db/column_family_test.o db/db_test_util.o $(LIBOBJECTS) $(TESTHARNESS)

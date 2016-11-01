@@ -87,6 +87,7 @@ LIB_SOURCES =                                                   \
   table/two_level_iterator.cc                                   \
   tools/dump/db_dump_tool.cc                                    \
   util/arena.cc                                                 \
+  util/persistent_arena.cc                                      \
   util/bloom.cc                                                 \
   util/build_version.cc                                         \
   util/cf_options.cc                                            \
@@ -290,6 +291,7 @@ MAIN_SOURCES =                                                    \
   util/env_test.cc                                                      \
   util/filelock_test.cc                                                 \
   util/histogram_test.cc                                                \
+  util/persistent_allocator_test.cc                                     \
   util/statistics_test.cc                                               \
   utilities/backupable/backupable_db_test.cc                            \
   utilities/blob_db/blob_db_test.cc                                     \
