@@ -37,13 +37,14 @@ DEFINE_string(cache_type, "block_cache",
               "Cache type. (block_cache, volatile, tiered)");
 DEFINE_bool(benchmark, false, "Benchmark mode");
 DEFINE_int32(volatile_cache_pct, 10, "Percentage of cache in memory tier.");
+DEFINE_bool(insert_if_not_found, true, "Insert key if not found when reading");
 
 namespace rocksdb {
 
 std::unique_ptr<PersistentCacheTier> NewVolatileCache() {
   assert(FLAGS_cache_size != std::numeric_limits<uint64_t>::max());
   std::unique_ptr<PersistentCacheTier> pcache(
-      new VolatileCacheTier(FLAGS_cache_size));
+      new VolatileCacheTier(true, FLAGS_cache_size));
   return pcache;
 }
 
@@ -71,8 +72,8 @@ std::unique_ptr<PersistentTieredCache> NewTieredCache(
   std::unique_ptr<PersistentTieredCache> tcache(new PersistentTieredCache());
   // create primary tier
   assert(mem_size);
-  auto pcache =
-      std::shared_ptr<PersistentCacheTier>(new VolatileCacheTier(mem_size));
+  auto pcache = std::shared_ptr<PersistentCacheTier>(
+      new VolatileCacheTier(true, mem_size));
   tcache->AddTier(pcache);
   // create secondary tier
   auto scache = std::shared_ptr<PersistentCacheTier>(new BlockCacheTier(opt));
@@ -229,7 +230,13 @@ class CacheTierBenchmark {
     if (!status.ok()) {
       fprintf(stderr, "%s\n", status.ToString().c_str());
     }
-    assert(status.ok());
+    assert(status.ok() || status.IsNotFound());
+    if (!status.ok() && FLAGS_insert_if_not_found) {
+      InsertKey(val);
+      const size_t elapsed_micro = timer.ElapsedNanos() / 1000;
+      stats_.read_latency_.Add(elapsed_micro);
+      return;
+    }
     assert(size == (size_t) FLAGS_iosize);
 
     // adjust stats
