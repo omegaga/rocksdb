@@ -32,7 +32,7 @@ Status NewWritableCacheFile(Env* const env, const std::string& filepath,
 
 Status NewRandomAccessCacheFile(Env* const env, const std::string& filepath,
                                 std::unique_ptr<RandomAccessFile>* file,
-                                const bool use_direct_reads = true) {
+                                const bool use_direct_reads = false) {
   EnvOptions opt;
   opt.use_direct_reads = use_direct_reads;
   Status s = env->NewRandomAccessFile(filepath, file, opt);

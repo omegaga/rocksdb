@@ -1248,6 +1248,7 @@ Status DBImpl::Recover(
     const std::vector<ColumnFamilyDescriptor>& column_families, bool read_only,
     bool error_if_log_file_exist, bool error_if_data_exists_in_logs) {
   mutex_.AssertHeld();
+  StopWatchNano sw(env_, true);
 
   bool is_new_db = false;
   assert(db_lock_ == nullptr);
@@ -1363,6 +1364,7 @@ Status DBImpl::Recover(
 
     if (!logs.empty()) {
       // Recover in the order in which the logs were generated
+      env_->NowMicros();
       std::sort(logs.begin(), logs.end());
       s = RecoverLogFiles(logs, &next_sequence, read_only);
       if (!s.ok()) {
@@ -1382,6 +1384,7 @@ Status DBImpl::Recover(
     max_total_in_memory_state_ += mutable_cf_options->write_buffer_size *
                                   mutable_cf_options->max_write_buffer_number;
   }
+  printf("Recovery time elapsed: %" PRIu64 "\n", sw.ElapsedNanos(false));
 
   return s;
 }

@@ -10,7 +10,7 @@
 #include <memory>
 #include <sstream>
 #include <unordered_map>
-
+#include <jemalloc/jemalloc.h>
 #include "rocksdb/env.h"
 
 #include "utilities/persistent_cache/block_cache_tier.h"
@@ -36,14 +36,16 @@ DEFINE_bool(enable_pipelined_writes, false, "Enable async writes");
 DEFINE_string(cache_type, "block_cache",
               "Cache type. (block_cache, volatile, tiered)");
 DEFINE_bool(benchmark, false, "Benchmark mode");
+DEFINE_int32(num_ops, std::numeric_limits<uint64_t>::max(), "Max IO Ops");
 DEFINE_int32(volatile_cache_pct, 10, "Percentage of cache in memory tier.");
+DEFINE_int32(distr, 0, "random distribution: 0 for uniform, 1 for zipfian");
 
 namespace rocksdb {
 
 std::unique_ptr<PersistentCacheTier> NewVolatileCache() {
   assert(FLAGS_cache_size != std::numeric_limits<uint64_t>::max());
   std::unique_ptr<PersistentCacheTier> pcache(
-      new VolatileCacheTier(FLAGS_cache_size));
+      new VolatileCacheTier(true, FLAGS_cache_size));
   return pcache;
 }
 
@@ -63,8 +65,21 @@ std::unique_ptr<PersistentCacheTier> NewBlockCache() {
   Status status = cache->Open();
   return cache;
 }
+double getMemory() {
+  uint64_t epoch = 1;
+  size_t sz = sizeof(epoch);
+  mallctl("epoch", &epoch, &sz, &epoch, sz);
 
-// create a new cache tier
+  size_t allocated;
+  sz = sizeof(size_t);
+  if (mallctl("stats.allocated", &allocated, &sz, NULL, 0) == 0) {
+    return allocated / 1000000000.0;
+  }
+  return -1;
+}
+
+
+  // create a new cache tier
 // construct a tiered RAM+Block cache
 std::unique_ptr<PersistentTieredCache> NewTieredCache(
     const size_t mem_size, const PersistentCacheConfig& opt) {
@@ -72,7 +87,7 @@ std::unique_ptr<PersistentTieredCache> NewTieredCache(
   // create primary tier
   assert(mem_size);
   auto pcache =
-      std::shared_ptr<PersistentCacheTier>(new VolatileCacheTier(mem_size));
+      std::shared_ptr<PersistentCacheTier>(new VolatileCacheTier(true, mem_size));
   tcache->AddTier(pcache);
   // create secondary tier
   auto scache = std::shared_ptr<PersistentCacheTier>(new BlockCacheTier(opt));
@@ -107,18 +122,21 @@ class CacheTierBenchmark {
  public:
   explicit CacheTierBenchmark(std::shared_ptr<PersistentCacheTier>&& cache)
       : cache_(cache) {
+    double memSize = getMemory();
     if (FLAGS_nthread_read) {
       fprintf(stdout, "Pre-populating\n");
       Prepop();
       fprintf(stdout, "Pre-population completed\n");
     }
+    double memSize2 = getMemory();
+    printf("Memory after prepop: %lf\n", memSize2 - memSize);
 
     stats_.Clear();
 
     // Start IO threads
-    std::list<port::Thread> threads;
-    Spawn(FLAGS_nthread_write, &threads,
-          std::bind(&CacheTierBenchmark::Write, this));
+    std::list<std::thread> threads;
+//    Spawn(FLAGS_nthread_write, &threads,
+//          std::bind(&CacheTierBenchmark::Write, this));
     Spawn(FLAGS_nthread_read, &threads,
           std::bind(&CacheTierBenchmark::Read, this));
 
@@ -127,12 +145,14 @@ class CacheTierBenchmark {
     size_t sec = t.ElapsedNanos() / 1000000000ULL;
     while (!quit_) {
       sec = t.ElapsedNanos() / 1000000000ULL;
-      quit_ = sec > size_t(FLAGS_nsec);
+      quit_ = (sec > size_t(FLAGS_nsec) || FLAGS_num_ops > insert_key_limit_.load());
       /* sleep override */ sleep(1);
     }
 
     // Wait for threads to exit
     Join(&threads);
+    double memSize3 = getMemory();
+    printf("Final Memory: %lf\n", memSize3 - memSize);
     // Print stats
     PrintStats(sec);
     // Close the cache
@@ -176,9 +196,9 @@ class CacheTierBenchmark {
   }
 
   void Write() {
-    while (!quit_) {
-      InsertKey(insert_key_limit_++);
-    }
+//    while (!quit_) {
+//      InsertKey(insert_key_limit_++);
+//    }
   }
 
   void InsertKey(const uint64_t key) {
@@ -212,8 +232,12 @@ class CacheTierBenchmark {
   //
   void Read() {
     while (!quit_) {
-      ReadKey(random() % read_key_limit_);
+      ReadKey(Random(read_key_limit_ * 2));
     }
+  }
+
+  inline uint64_t Random(uint64_t limit) {
+    return random() % limit;
   }
 
   void ReadKey(const uint64_t val) {
@@ -227,7 +251,9 @@ class CacheTierBenchmark {
     size_t size;
     Status status = cache_->Lookup(key, &block, &size);
     if (!status.ok()) {
-      fprintf(stderr, "%s\n", status.ToString().c_str());
+      InsertKey(val);
+      stats_.read_latency_.Add(elapsed_micro);
+      return;
     }
     assert(status.ok());
     assert(size == (size_t) FLAGS_iosize);

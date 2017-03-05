@@ -45,7 +45,9 @@ class VolatileCacheTier : public PersistentCacheTier {
   explicit VolatileCacheTier(
       const bool is_compressed = true,
       const size_t max_size = std::numeric_limits<size_t>::max())
-      : is_compressed_(is_compressed), max_size_(max_size) {}
+      : is_compressed_(is_compressed), max_size_(max_size) {
+    allocator_ = new PersistentAllocator();
+  }
 
   virtual ~VolatileCacheTier();
 
@@ -80,12 +82,14 @@ class VolatileCacheTier : public PersistentCacheTier {
 
     explicit CacheData(const std::string& _key, const std::string& _value = "")
         : key(_key), value(_value) {}
+    CacheData() {}
 
     virtual ~CacheData() {}
 
-    const std::string key;
-    const std::string value;
+    std::string key;
+    std::string value;
   };
+  PersistentAllocator* allocator_;
 
   static void DeleteCacheData(CacheData* data);
 

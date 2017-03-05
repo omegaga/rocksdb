@@ -13,10 +13,10 @@ namespace rocksdb {
 
 void VolatileCacheTier::DeleteCacheData(VolatileCacheTier::CacheData* data) {
   assert(data);
-  delete data;
+//  delete data;
 }
 
-VolatileCacheTier::~VolatileCacheTier() { index_.Clear(&DeleteCacheData); }
+VolatileCacheTier::~VolatileCacheTier() { index_.Clear(&DeleteCacheData); delete allocator_; }
 
 PersistentCache::StatsType VolatileCacheTier::Stats() {
   std::map<std::string, double> stat;
@@ -63,9 +63,14 @@ Status VolatileCacheTier::Insert(const Slice& page_key, const char* data,
   // insert order: LRU, followed by index
   std::string key(page_key.data(), page_key.size());
   std::string value(data, size);
-  std::unique_ptr<CacheData> cache_data(
-      new CacheData(std::move(key), std::move(value)));
-  bool ok = index_.Insert(cache_data.get());
+  auto ptr = allocator_->Allocate(sizeof(CacheData));
+
+  auto cache_data = new(ptr) CacheData(std::move(key), std::move(value));
+//  CacheData* cache_data = reinterpret_cast<CacheData*>(ptr);
+//  cache_data->key = std::move(key);
+//  cache_data->value = std::move(value);
+
+  bool ok = index_.Insert(cache_data);
   if (!ok) {
     // decrement the size that we incremented ahead of time
     assert(size_ >= size);
@@ -74,7 +79,6 @@ Status VolatileCacheTier::Insert(const Slice& page_key, const char* data,
     return Status::TryAgain("key already exists in volatile cache");
   }
 
-  cache_data.release();
   stats_.cache_inserts_++;
   return Status::OK();
 }
@@ -128,7 +132,7 @@ bool VolatileCacheTier::Evict() {
 
   // adjust size and destroy data
   size_ -= edata->value.size();
-  delete edata;
+//  delete edata;
 
   return true;
 }

@@ -17,6 +17,7 @@
 
 #include "include/rocksdb/env.h"
 #include "util/mutexlock.h"
+#include "util/persistent_allocator.h"
 
 namespace rocksdb {
 
@@ -89,9 +90,10 @@ class HashTable {
     // post-conditions
     assert(buckets_);
     assert(locks_);
+    allocator_ = new PersistentAllocator();
   }
 
-  virtual ~HashTable() { AssertEmptyBuckets(); }
+  virtual ~HashTable() { AssertEmptyBuckets(); delete allocator_; }
 
   //
   // Insert given record to hash table
@@ -158,46 +160,65 @@ class HashTable {
     for (uint32_t i = 0; i < nbuckets_; ++i) {
       const uint32_t lock_idx = i % nlocks_;
       WriteLock _(&locks_[lock_idx]);
-      for (auto& t : buckets_[i].list_) {
-        (*fn)(t);
+      for (auto it = buckets_[i].list_; it != nullptr; it = it->next) {
+        (*fn)(it->t);
       }
-      buckets_[i].list_.clear();
+//      buckets_[i].list_.clear();
     }
   }
 
  protected:
   // Models bucket of keys that hash to the same bucket number
+  struct Node {
+    const T t;
+    Node* next;
+    Node* prev;
+    Node(const T& t_) : t(t_), next(nullptr), prev(nullptr) {}
+  };
   struct Bucket {
-    std::list<T> list_;
+//    std::list<T> list_;
+    Node* list_;
+    Node* tail_;
+    Bucket() : list_(nullptr), tail_(nullptr) {}
   };
 
   // Substitute for std::find with custom comparator operator
-  typename std::list<T>::iterator Find(std::list<T>* list, const T& t) {
-    for (auto it = list->begin(); it != list->end(); ++it) {
-      if (Equal()(*it, t)) {
+  Node* Find(Node* list, const T& t) {
+    for (auto it = list; it != nullptr; it = it->next) {
+      if (Equal()(it->t, t)) {
         return it;
       }
     }
-    return list->end();
+    return nullptr;
   }
 
   bool Insert(Bucket* bucket, const T& t) {
     // Check if the key already exists
-    auto it = Find(&bucket->list_, t);
-    if (it != bucket->list_.end()) {
+    auto it = Find(bucket->list_, t);
+    if (it != nullptr) {
       return false;
     }
 
     // insert to bucket
-    bucket->list_.push_back(t);
+//    bucket->list_.push_back(t);
+    auto newNode = new Node(t);
+    if (bucket->tail_ == nullptr) {
+      // First node
+      bucket->tail_ = newNode;
+      bucket->list_ = newNode;
+    } else {
+      bucket->tail_->next = newNode;
+      newNode->prev = bucket->tail_;
+      bucket->tail_ = newNode;
+    }
     return true;
   }
 
   bool Find(Bucket* bucket, const T& t, T* ret) {
-    auto it = Find(&bucket->list_, t);
-    if (it != bucket->list_.end()) {
+    auto it = Find(bucket->list_, t);
+    if (it != nullptr) {
       if (ret) {
-        *ret = *it;
+        *ret = it->t;
       }
       return true;
     }
@@ -205,13 +226,27 @@ class HashTable {
   }
 
   bool Erase(Bucket* bucket, const T& t, T* ret) {
-    auto it = Find(&bucket->list_, t);
-    if (it != bucket->list_.end()) {
+    auto it = Find(bucket->list_, t);
+    if (it != nullptr) {
       if (ret) {
-        *ret = *it;
+        *ret = it->t;
       }
 
-      bucket->list_.erase(it);
+//      bucket->list_.erase(it);
+      if (it->prev != nullptr) {
+        it->prev->next = it->next;
+      } else {
+        assert(it == bucket->list_);
+        bucket->list_ = it->next;
+      }
+      if (it->next != nullptr) {
+        it->next->prev = it->prev;
+      } else {
+        assert(it == bucket->tail_);
+        bucket->tail_ = it->prev;
+      }
+      // delete it;
+
       return true;
     }
     return false;
@@ -222,7 +257,7 @@ class HashTable {
 #ifndef NDEBUG
     for (size_t i = 0; i < nbuckets_; ++i) {
       WriteLock _(&locks_[i % nlocks_]);
-      assert(buckets_[i].list_.empty());
+//      assert(buckets_[i].list_.empty());
     }
 #endif
   }
@@ -231,6 +266,7 @@ class HashTable {
   std::unique_ptr<Bucket[]> buckets_;       // Spine of the hash buckets
   const uint32_t nlocks_;                   // No. of locks
   std::unique_ptr<port::RWMutex[]> locks_;  // Granular locks
+  PersistentAllocator* allocator_;
 };
 
 }  // namespace rocksdb

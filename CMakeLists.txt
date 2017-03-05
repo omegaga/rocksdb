@@ -358,6 +358,7 @@ set(SOURCES
         util/coding.cc
         util/compaction_job_stats_impl.cc
         util/comparator.cc
+        util/persistent_concurrent_arena.cc
         util/concurrent_arena.cc
         util/crc32c.cc
         util/db_options.cc
@@ -568,6 +569,7 @@ set(TESTS
         db/filename_test.cc
         db/flush_job_test.cc
         db/inlineskiplist_test.cc
+        db/persistent_inlineskiplist_test.cc
         db/listener_test.cc
         db/log_test.cc
         db/manual_compaction_test.cc

@@ -114,14 +114,11 @@ class EvictableHashTable : private HashTable<T*, Hash, Equal> {
       WriteLock _(&hash_table::locks_[lock_idx]);
       auto& lru_list = lru_lists_[lock_idx];
       auto& bucket = hash_table::buckets_[i];
-      for (auto* t : bucket.list_) {
-        lru_list.Unlink(t);
-        (*fn)(t);
+      for (auto it = bucket.list_; it != nullptr; it = it->next) {
+        lru_list.Unlink(it->t);
+        (*fn)(it->t);
       }
-      bucket.list_.clear();
     }
-    // make sure that all LRU lists are emptied
-    AssertEmptyLRU();
   }
 
   void AssertEmptyLRU() {

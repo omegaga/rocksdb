@@ -357,6 +357,8 @@ TESTS = \
 	full_filter_block_test \
 	hash_table_test \
 	histogram_test \
+	persistent_inlineskiplist_test \
+	inlineskiplist_test \
 	log_test \
 	manual_compaction_test \
 	mock_env_test \
@@ -436,6 +438,7 @@ PARALLEL_TEST = \
 	db_wal_test \
 	external_sst_file_test \
 	fault_injection_test \
+	persistent_inlineskiplist_test \
 	inlineskiplist_test \
 	manual_compaction_test \
 	persistent_cache_test \
@@ -1171,6 +1174,9 @@ block_test: table/block_test.o $(LIBOBJECTS) $(TESTHARNESS)
 	$(AM_LINK)
 
 inlineskiplist_test: db/inlineskiplist_test.o $(LIBOBJECTS) $(TESTHARNESS)
+	$(AM_LINK)
+
+persistent_inlineskiplist_test: db/persistent_inlineskiplist_test.o $(LIBOBJECTS) $(TESTHARNESS)
 	$(AM_LINK)
 
 skiplist_test: db/skiplist_test.o $(LIBOBJECTS) $(TESTHARNESS)

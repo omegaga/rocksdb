@@ -3,7 +3,7 @@
 //  LICENSE file in the root directory of this source tree. An additional grant
 //  of patent rights can be found in the PATENTS file in the same directory.
 //
-#include "db/inlineskiplist.h"
+#include "db/persistent_inlineskiplist.h"
 #include "db/memtable.h"
 #include "rocksdb/memtablerep.h"
 #include "util/arena.h"
@@ -11,7 +11,7 @@
 namespace rocksdb {
 namespace {
 class PersistentSkipListRep : public MemTableRep {
-  InlineSkipList<const MemTableRep::KeyComparator&> skip_list_;
+  PersistentInlineSkipList<const MemTableRep::KeyComparator&> skip_list_;
   const MemTableRep::KeyComparator& cmp_;
   const SliceTransform* transform_;
   const size_t lookahead_;
@@ -37,7 +37,9 @@ public:
   }
 
   virtual void InsertWithHint(KeyHandle handle, void** hint) override {
-    skip_list_.InsertWithHint(static_cast<char*>(handle), hint);
+    skip_list_.InsertWithHint(
+        static_cast<char*>(handle),
+        reinterpret_cast<decltype(skip_list_)::InsertHint**>(hint));
   }
 
   virtual void InsertConcurrently(KeyHandle handle) override {
@@ -266,7 +268,7 @@ public:
 };
 }
 
-MemTableRep* SkipListFactory::CreateMemTableRep(
+MemTableRep* PersistentSkipListFactory::CreateMemTableRep(
     const MemTableRep::KeyComparator& compare, MemTableAllocator* allocator,
     const SliceTransform* transform, Logger* logger) {
   return new PersistentSkipListRep(compare, allocator, transform, lookahead_);
